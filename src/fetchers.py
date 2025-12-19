@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import Optional
 
-from .cache import CacheStore, deserialize_json, serialize_json
+from rockauto_buyersguide_scraper.cache import CacheStore, deserialize_json, serialize_json
 
 BUYER_GUIDE_CACHE_KIND = "buyer_guide_api"
 INFO_HTML_CACHE_KIND = "info_page_html"

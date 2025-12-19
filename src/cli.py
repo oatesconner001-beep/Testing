@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .cache import CacheStore
+from rockauto_buyersguide_scraper.cache import CacheStore
 from .fetchers import fetch_buyer_guide, fetch_info_page_playwright, fetch_info_page_python
 
 DEFAULT_TTL_SECONDS = 60 * 60 * 24
