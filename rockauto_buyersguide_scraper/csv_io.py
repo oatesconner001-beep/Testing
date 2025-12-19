@@ -37,7 +37,11 @@ def ensure_output_schema(
             reader = csv.reader(handle)
             existing_header = next(reader, [])
         if existing_header:
-            return existing_header
+            merged_header = list(existing_header)
+            merged_header.extend(
+                name for name in fieldnames if name not in existing_header
+            )
+            return merged_header
     return fieldnames
 
 
