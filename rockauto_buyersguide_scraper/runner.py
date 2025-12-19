@@ -7,7 +7,7 @@ import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from .csv_io import append_rows, ensure_output_schema, read_csv_in_batches
 from .http_client import fetch_http_data
@@ -20,6 +20,12 @@ EXTRA_FIELDS = [
     "ui_status",
     "ui_data",
 ]
+URL_CACHE_SENTINEL = "__url__"
+HTTP_CACHE_KIND = "http"
+UI_CACHE_KIND = "ui"
+
+CacheKey = Tuple[str, str, str]
+CacheValue = Dict[str, str]
 
 
 @dataclass
@@ -70,22 +76,62 @@ def _extract_ui_target(row: Dict[str, str]) -> Optional[str]:
     return row.get("ui_query") or row.get("query") or None
 
 
-async def _bounded_fetch_http(row: Dict[str, str], semaphore: asyncio.Semaphore) -> Dict[str, str]:
+def _cache_key(row: Dict[str, str], cache_kind: str, target: Optional[str]) -> CacheKey:
+    if target:
+        return (URL_CACHE_SENTINEL, URL_CACHE_SENTINEL, f"{cache_kind}:{target}")
+    part_number = row.get("part_number") or ""
+    part_type = row.get("part_type") or ""
+    return (part_number, part_type, cache_kind)
+
+
+def _cache_lookup(cache: Dict[CacheKey, CacheValue], key: CacheKey) -> Optional[CacheValue]:
+    return cache.get(key)
+
+
+def _cache_store(cache: Dict[CacheKey, CacheValue], key: CacheKey, value: CacheValue) -> None:
+    cache[key] = value
+
+
+async def _bounded_fetch_http(
+    row: Dict[str, str],
+    semaphore: asyncio.Semaphore,
+    cache: Dict[CacheKey, CacheValue],
+) -> Dict[str, str]:
+    target = _extract_http_target(row)
+    cache_key = _cache_key(row, HTTP_CACHE_KIND, target)
+    cached = _cache_lookup(cache, cache_key)
+    if cached is not None:
+        return cached
+
     async with semaphore:
-        result = await fetch_http_data(_extract_http_target(row))
-    return {
+        result = await fetch_http_data(target)
+    payload = {
         "http_status": str(result.get("status", "")),
         "http_data": str(result.get("data", "")),
     }
+    _cache_store(cache, cache_key, payload)
+    return payload
 
 
-async def _bounded_fetch_ui(row: Dict[str, str], semaphore: asyncio.Semaphore) -> Dict[str, str]:
+async def _bounded_fetch_ui(
+    row: Dict[str, str],
+    semaphore: asyncio.Semaphore,
+    cache: Dict[CacheKey, CacheValue],
+) -> Dict[str, str]:
+    target = _extract_ui_target(row)
+    cache_key = _cache_key(row, UI_CACHE_KIND, target)
+    cached = _cache_lookup(cache, cache_key)
+    if cached is not None:
+        return cached
+
     async with semaphore:
-        result = await fetch_ui_data(_extract_ui_target(row))
-    return {
+        result = await fetch_ui_data(target)
+    payload = {
         "ui_status": str(result.get("status", "")),
         "ui_data": str(result.get("data", "")),
     }
+    _cache_store(cache, cache_key, payload)
+    return payload
 
 
 async def _process_batch(
@@ -95,9 +141,12 @@ async def _process_batch(
 ) -> List[Dict[str, str]]:
     http_semaphore = asyncio.Semaphore(max_concurrency)
     ui_semaphore = asyncio.Semaphore(max_concurrency)
+    cache: Dict[CacheKey, CacheValue] = {}
 
-    http_tasks = [asyncio.create_task(_bounded_fetch_http(row, http_semaphore)) for row in rows]
-    ui_tasks = [asyncio.create_task(_bounded_fetch_ui(row, ui_semaphore)) for row in rows]
+    http_tasks = [
+        asyncio.create_task(_bounded_fetch_http(row, http_semaphore, cache)) for row in rows
+    ]
+    ui_tasks = [asyncio.create_task(_bounded_fetch_ui(row, ui_semaphore, cache)) for row in rows]
 
     http_results = await asyncio.gather(*http_tasks)
     ui_results = await asyncio.gather(*ui_tasks)
