@@ -24,6 +24,8 @@ EXTRA_FIELDS = [
     "ui_cache_hit",
 ]
 
+DEFAULT_CACHE_TTL_SECONDS = 60 * 60 * 24
+
 
 @dataclass
 class Checkpoint:
@@ -267,6 +269,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--batch-size", type=int, default=200)
     parser.add_argument("--max-concurrency", type=int, default=10)
     parser.add_argument("--checkpoint-dir", type=Path, default=Path("output/checkpoints"))
+    parser.add_argument(
+        "--cache-dir",
+        default=".cache",
+        help="Directory used to store cache files.",
+    )
+    parser.add_argument(
+        "--cache-ttl",
+        type=int,
+        default=DEFAULT_CACHE_TTL_SECONDS,
+        help="Cache TTL in seconds before entries are refreshed.",
+    )
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--cache-dir", type=Path, default=Path("output/cache"))
     parser.add_argument("--cache-ttl", type=int, default=60 * 60 * 24)
@@ -276,6 +289,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Optional[Iterable[str]] = None) -> None:
     args = build_parser().parse_args(argv)
+    cache = CacheStore(Path(args.cache_dir), ttl_seconds=args.cache_ttl)
+    cache.prune_expired()
     run(
         input_csv=args.input_csv,
         output_csv=args.output_csv,
