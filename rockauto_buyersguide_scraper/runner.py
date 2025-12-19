@@ -12,6 +12,7 @@ from typing import Dict, Iterable, List, Optional
 from .csv_io import append_rows, ensure_output_schema, read_csv_in_batches
 from .http_client import fetch_http_data
 from .ui_automation import fetch_ui_data
+from src.cache import CacheStore
 
 
 EXTRA_FIELDS = [
@@ -20,6 +21,8 @@ EXTRA_FIELDS = [
     "ui_status",
     "ui_data",
 ]
+
+DEFAULT_CACHE_TTL_SECONDS = 60 * 60 * 24
 
 
 @dataclass
@@ -155,12 +158,25 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--batch-size", type=int, default=200)
     parser.add_argument("--max-concurrency", type=int, default=10)
     parser.add_argument("--checkpoint-dir", type=Path, default=Path("output/checkpoints"))
+    parser.add_argument(
+        "--cache-dir",
+        default=".cache",
+        help="Directory used to store cache files.",
+    )
+    parser.add_argument(
+        "--cache-ttl",
+        type=int,
+        default=DEFAULT_CACHE_TTL_SECONDS,
+        help="Cache TTL in seconds before entries are refreshed.",
+    )
     parser.add_argument("--resume", action="store_true")
     return parser
 
 
 def main(argv: Optional[Iterable[str]] = None) -> None:
     args = build_parser().parse_args(argv)
+    cache = CacheStore(Path(args.cache_dir), ttl_seconds=args.cache_ttl)
+    cache.prune_expired()
     run(
         input_csv=args.input_csv,
         output_csv=args.output_csv,
