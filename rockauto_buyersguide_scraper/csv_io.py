@@ -50,9 +50,23 @@ def append_rows(
     fieldnames: Sequence[str],
     rows: Iterable[Dict[str, str]],
 ) -> None:
+    resolved_fieldnames = list(fieldnames)
     is_new_file = not output_path.exists()
+    if not is_new_file:
+        with output_path.open(newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            existing_header = reader.fieldnames or []
+            if existing_header != resolved_fieldnames:
+                existing_rows = list(reader)
+                temp_path = output_path.with_suffix(f"{output_path.suffix}.tmp")
+                with temp_path.open("w", newline="", encoding="utf-8") as temp_handle:
+                    writer = csv.DictWriter(temp_handle, fieldnames=resolved_fieldnames)
+                    writer.writeheader()
+                    for row in existing_rows:
+                        writer.writerow(row)
+                temp_path.replace(output_path)
     with output_path.open("a", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer = csv.DictWriter(handle, fieldnames=resolved_fieldnames)
         if is_new_file:
             writer.writeheader()
         for row in rows:
