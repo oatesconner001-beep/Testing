@@ -238,6 +238,8 @@ def run(
     output_fieldnames: Optional[List[str]] = None
     processed_index = skip_rows - 1
     cache = CacheStore(cache_dir, ttl_seconds=cache_ttl) if cache_dir else None
+    if cache:
+        cache.prune_expired()
     if cache and cache_clear:
         cache.clear()
 
