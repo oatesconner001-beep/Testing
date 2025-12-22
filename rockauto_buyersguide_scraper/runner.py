@@ -25,6 +25,7 @@ EXTRA_FIELDS = [
 ]
 
 DEFAULT_CACHE_TTL_SECONDS = 60 * 60 * 24
+URL_CACHE_SENTINEL = "__url__"
 
 
 @dataclass
@@ -96,6 +97,9 @@ def _cache_lookup(
 ) -> Optional[str]:
     if cache is None:
         return None
+    if cache_kind.startswith(("http:", "ui:")):
+        part_number = URL_CACHE_SENTINEL
+        part_type = URL_CACHE_SENTINEL
     cached = cache.get(part_number or cache_kind, part_type or "unknown", cache_kind)
     if cached is None:
         return None
@@ -112,6 +116,9 @@ def _cache_store(
 ) -> None:
     if cache is None:
         return
+    if cache_kind.startswith(("http:", "ui:")):
+        part_number = URL_CACHE_SENTINEL
+        part_type = URL_CACHE_SENTINEL
     cache.set(part_number or cache_kind, part_type or "unknown", cache_kind, value)
 
 
